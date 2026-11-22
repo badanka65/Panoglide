@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>PanoGlide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#0e0f12;--pn:#16181d;--hi:#1f222a;--bd:#2a2d36;--tx:#eceef0;--mu:#8b909a;--ac:#e8b04a;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#f5f5f2;--pn:#fff;--hi:#ecebe6;--bd:#d6d4cc;--tx:#1b1c1f;--mu:#6b6f78;color-scheme:light}}
+:root[data-theme="light"]{--bg:#f5f5f2;--pn:#fff;--hi:#ecebe6;--bd:#d6d4cc;--tx:#1b1c1f;--mu:#6b6f78;color-scheme:light}
+:root[data-theme="dark"]{--bg:#0e0f12;--pn:#16181d;--hi:#1f222a;--bd:#2a2d36;--tx:#eceef0;--mu:#8b909a;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px;max-width:1100px;margin:auto}
+h1{font-size:22px;margin:0}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+main{display:grid;gap:14px;grid-template-columns:1fr}@media(min-width:860px){main{grid-template-columns:1.4fr 1fr}}
+.card{background:var(--pn);border-radius:14px;padding:12px}
+canvas{width:100%;display:block;border-radius:10px;background:var(--hi);touch-action:none}
+#pv{max-height:60vh;width:auto;max-width:100%;margin:auto}
+button,select,input[type=number]{background:var(--hi);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:8px 12px;font:inherit}
+button.on,button.pri{background:var(--ac);color:#111;border-color:var(--ac);font-weight:600}
+label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0}
+.mu{color:var(--mu);font-size:13px}h3{font-size:12px;letter-spacing:.1em;color:var(--mu);margin:14px 0 4px}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}input[type=range]{width:100%;accent-color:var(--ac)}
+progress{width:100%;accent-color:var(--ac)}video{width:100%;border-radius:10px;margin-top:8px;max-height:50vh}
+#drop{padding:30px;text-align:center;color:var(--mu)}[hidden]{display:none!important}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.js"></script>
+</head><body>
+<header><h1>PanoGlide</h1><button class="pri" id="open">Open panorama…</button></header>
+<input type="file" id="file" accept="image/*" hidden>
+<main>
+<section class="card">
+ <div id="drop">Tap “Open panorama” or drop an image here.</div>
+ <canvas id="ov" hidden></canvas>
+ <div class="row" style="margin-top:8px"><span class="mu" id="hint">Drag on the photo to crop.</span><button id="clr" hidden>Clear crop</button></div>
+ <h3>ASPECT RATIO</h3>
+ <div class="row" id="ratios"></div>
+ <h3>PREVIEW</h3>
+ <div class="row"><button id="play">▶ Play</button><input type="range" id="scrub" min="0" max="1000" value="0" style="flex:1"><span class="mu" id="tl">0.0 s</span></div>
+ <canvas id="pv" style="margin-top:8px"></canvas>
+ <p class="mu" id="info"></p>
+</section>
+<section class="card">
+ <h3 style="margin-top:0">MOVEMENT</h3>
+ <label>Duration <span><input type="number" id="dur" value="10" min="1" max="120" step="0.5" style="width:80px"> s</span></label>
+ <label>Speed curve <select id="ease"><option value="smooth">Smooth start and stop</option><option value="linear">Constant speed</option><option value="in">Slow start</option><option value="out">Slow stop</option></select></label>
+ <label><span>Reverse direction</span><input type="checkbox" id="rev"></label>
+ <label>Starts at <span class="mu" id="v_from">0%</span></label><input type="range" id="from" min="0" max="100" value="0">
+ <label>Ends at <span class="mu" id="v_to">100%</span></label><input type="range" id="to" min="0" max="100" value="100">
+ <label>Zoom at start <span class="mu" id="v_z0">1.00×</span></label><input type="range" id="z0" min="100" max="400" value="100">
+ <label>Zoom at end <span class="mu" id="v_z1">1.00×</span></label><input type="range" id="z1" min="100" max="400" value="100">
+ <h3>SAVE VIDEO</h3>
+ <label>Resolution <select id="res"><option value="720">HD · 720p</option><option value="1080" selected>Full HD · 1080p</option><option value="1440">2K · 1440p</option><option value="2160">4K · 2160p</option></select></label>
+ <label>Frame rate (FPS) <select id="fps"><option>24</option><option selected>30</option><option>60</option></select></label>
+ <label>Format <select id="fmt"><option value="avc">H.264 · most compatible</option><option value="hevc">HEVC · smaller files</option></select></label>
+ <label>Quality <select id="q"><option value="0.08">High</option><option value="0.12" selected>Very high</option><option value="0.2">Maximum</option></select></label>
+ <p class="mu" id="oinfo"></p>
+ <button class="pri" id="save" style="width:100%" disabled>Create video</button>
+ <progress id="prog" hidden></progress><div class="row"><span class="mu" id="pl"></span><button id="cancel" hidden>Cancel</button></div>
+ <div id="done" hidden><video id="vid" controls playsinline></video><button class="pri" id="dl" style="width:100%;margin-top:8px">Save file…</button><p class="mu" id="dlmsg"></p></div>
+</section>
+</main>
+<script>
+const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const S={img:null,iw:0,ih:0,crop:null,ratio:[9,16],name:"panoglide",drag:null,raf:0,busy:false,cancel:false,blob:null};
+const EAS={smooth:t=>.5-.5*Math.cos(Math.PI*t),linear:t=>t,in:t=>1-Math.cos(t*Math.PI/2),out:t=>Math.sin(t*Math.PI/2)};
+const RAT=[[9,16],[16,9],[1,1],[4,5]];
+RAT.forEach((r,i)=>{const b=document.createElement("button");b.textContent=r.join(":");b.onclick=()=>{S.ratio=r;[...$("#ratios").children].forEach(c=>c.classList.toggle("on",c===b));refresh()};if(!i)b.classList.add("on");$("#ratios").append(b)});
+const fmt={from:v=>v+"%",to:v=>v+"%",z0:v=>(v/100).toFixed(2)+"×",z1:v=>(v/100).toFixed(2)+"×"};
+for(const k in fmt)$("#"+k).oninput=e=>{$("#v_"+k).textContent=fmt[k](e.target.value);refresh()};
+["dur","ease","rev","res","fps","fmt"].forEach(k=>$("#"+k).oninput=refresh);
+const crop=()=>S.crop||{x:0,y:0,w:S.iw,h:S.ih};
+function sz(c,zm){const a=S.ratio[0]/S.ratio[1];let w=c.h*a,h=c.h;if(w>c.w){w=c.w;h=c.w/a}return[w/zm,h/zm]}
+function winAt(t){
+ const c=crop();let p0=$("#from").value/100,p1=$("#to").value/100,z0=$("#z0").value/100,z1=$("#z1").value/100;
+ if($("#rev").checked)[p0,p1,z0,z1]=[p1,p0,z1,z0];
+ const e=EAS[$("#ease").value](Math.min(1,Math.max(0,t))),p=p0+(p1-p0)*e,z=Math.exp(Math.log(z0)+(Math.log(z1)-Math.log(z0))*e);
+ const[mw,mh]=sz(c,Math.min(z0,z1)),dx=c.w-mw,dy=c.h-mh,ax=dx<=1&&dy<=1?"n":dx>=dy?"h":"v",[w,h]=sz(c,z);
+ return{x:c.x+(ax=="h"?p:.5)*(c.w-w),y:c.y+(ax=="v"?p:.5)*(c.h-h),w,h,ax};
+}
+function size(short){const a=S.ratio[0]/S.ratio[1],ev=n=>Math.max(2,Math.round(n/2)*2);return a>=1?[ev(short*a),ev(short)]:[ev(short),ev(short/a)]}
+function draw(ctx,W,H,w){ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";ctx.drawImage(S.img,w.x,w.y,w.w,w.h,0,0,W,H)}
+function refresh(){
+ const dur=+$("#dur").value||10,[W,H]=size(+$("#res").value),n=Math.max(2,Math.round(dur*$("#fps").value));
+ $("#oinfo").textContent=`${W} × ${H} px · ${$("#fps").value} FPS · ${n} frames`;
+ if(!S.img)return;
+ const t=$("#scrub").value/1000,w=winAt(t),pv=$("#pv"),[pw,ph]=size(540);
+ if(pv.width!=pw||pv.height!=ph){pv.width=pw;pv.height=ph}
+ draw(pv.getContext("2d"),pw,ph,w);$("#tl").textContent=(t*dur).toFixed(1)+" s";
+ const mv=w.ax=="n"?"the photo already has this shape, use zoom or crop for a move":w.ax=="h"?"camera moves left and right":"camera moves up and down";
+ $("#info").textContent=`${S.iw} × ${S.ih} px${S.crop?` · crop ${S.crop.w} × ${S.crop.h}`:""} · ${mv}`;
+ drawOv(w);
+}
+function drawOv(w){
+ const cv=$("#ov"),dpr=devicePixelRatio||1,cw=cv.clientWidth,ch=Math.round(cw*S.ih/S.iw);
+ if(cv.width!=Math.round(cw*dpr)){cv.width=Math.round(cw*dpr);cv.height=Math.round(ch*dpr);cv.style.height=ch+"px"}
+ const c=cv.getContext("2d"),k=cv.width/S.iw;c.drawImage(S.img,0,0,cv.width,cv.height);
+ const r=(x,y,a,b)=>[x*k,y*k,a*k,b*k];
+ if(S.crop){c.fillStyle="rgba(0,0,0,.55)";c.beginPath();c.rect(0,0,cv.width,cv.height);c.rect(...r(S.crop.x,S.crop.y,S.crop.w,S.crop.h));c.fill("evenodd")}
+ c.lineWidth=2*dpr;c.strokeStyle="#e8b04a";c.strokeRect(...r(w.x,w.y,w.w,w.h));
+ if(S.drag){const[a,b]=S.drag;c.setLineDash([6*dpr,4*dpr]);c.strokeStyle="#fff";c.fillStyle="rgba(255,255,255,.15)";const q=r(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]));c.fillRect(...q);c.strokeRect(...q);c.setLineDash([])}
+}
+function pt(e){const b=$("#ov").getBoundingClientRect();return[Math.min(S.iw,Math.max(0,(e.clientX-b.left)/b.width*S.iw)),Math.min(S.ih,Math.max(0,(e.clientY-b.top)/b.height*S.ih))]}
+$("#ov").onpointerdown=e=>{e.target.setPointerCapture(e.pointerId);S.drag=[pt(e),pt(e)]};
+$("#ov").onpointermove=e=>{if(S.drag){S.drag[1]=pt(e);refresh()}};
+$("#ov").onpointerup=e=>{if(!S.drag)return;const[a,b]=[S.drag[0],pt(e)];S.drag=null;
+ const x=Math.round(Math.min(a[0],b[0])),y=Math.round(Math.min(a[1],b[1])),w=Math.round(Math.abs(a[0]-b[0])),h=Math.round(Math.abs(a[1]-b[1]));
+ if(w>=32&&h>=32){S.crop={x,y,w,h};$("#clr").hidden=false}refresh()};
+$("#clr").onclick=()=>{S.crop=null;$("#clr").hidden=true;refresh()};
+async function load(f){
+ if(!f||S.busy)return;stop();$("#info").textContent="Loading…";
+ try{const bmp=await createImageBitmap(f,{imageOrientation:"from-image"});S.img=bmp;S.iw=bmp.width;S.ih=bmp.height}
+ catch(e){alert("Couldn’t open this image. It may be too large for the browser, or not a supported file type.");return}
+ S.name=f.name.replace(/\.[^.]+$/,"")||"panoglide";S.crop=null;$("#clr").hidden=true;$("#drop").hidden=true;$("#ov").hidden=false;$("#save").disabled=false;$("#done").hidden=true;$("#scrub").value=0;refresh();
+}
+$("#open").onclick=()=>$("#file").click();$("#file").onchange=e=>load(e.target.files[0]);
+addEventListener("dragover",e=>e.preventDefault());addEventListener("drop",e=>{e.preventDefault();load(e.dataTransfer.files[0])});
+$("#scrub").oninput=()=>{stop();refresh()};
+function stop(){cancelAnimationFrame(S.raf);S.raf=0;$("#play").textContent="▶ Play"}
+$("#play").onclick=()=>{if(!S.img)return;if(S.raf)return stop();const s=$("#scrub"),o=+s.value>=1000?0:+s.value/1000,t0=performance.now();$("#play").textContent="❚❚ Pause";
+ const tick=now=>{const t=o+(now-t0)/1000/(+$("#dur").value||10);if(t>=1){s.value=1000;stop();refresh();return}s.value=Math.round(t*1000);refresh();S.raf=requestAnimationFrame(tick)};S.raf=requestAnimationFrame(tick)};
+$("#cancel").onclick=()=>{S.cancel=true};
+$("#save").onclick=async()=>{
+ if(!S.img||S.busy)return;stop();S.busy=true;S.cancel=false;$("#done").hidden=true;$("#save").disabled=true;
+ const pr=$("#prog"),pl=$("#pl");pr.hidden=false;pr.removeAttribute("value");$("#cancel").hidden=false;pl.textContent="Preparing the encoder …";
+ try{
+  if(!("VideoEncoder" in window)||typeof Mp4Muxer==="undefined")throw new Error("This browser can’t encode video (WebCodecs or the muxer is missing). Update iOS/Safari and try again.");
+  const short=+$("#res").value,fps=+$("#fps").value,hevc=$("#fmt").value=="hevc",dur=+$("#dur").value||10,[W,H]=size(short),n=Math.max(2,Math.round(dur*fps)),bitrate=Math.min(100e6,Math.round(W*H*fps*$("#q").value));
+  const cands=hevc?["hvc1.1.6.L153.B0","hvc1.1.6.L123.B0","hvc1.1.6.L93.B0"]:["avc1.640034","avc1.640033","avc1.64002A","avc1.640028","avc1.4d0028"];
+  let cfg=null;for(const codec of cands){const c={codec,width:W,height:H,bitrate,framerate:fps};try{const r=await VideoEncoder.isConfigSupported(c);if(r.supported){cfg=c;break}}catch(e){}}
+  if(!cfg)throw new Error(`This device can’t create ${hevc?"HEVC":"H.264"} video at ${W} × ${H} px and ${fps} FPS. Try a lower resolution or frame rate, or switch format.`);
+  const cv=document.createElement("canvas");cv.width=W;cv.height=H;const ctx=cv.getContext("2d");
+  const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:hevc?"hevc":"avc",width:W,height:H,frameRate:fps},fastStart:"in-memory"});
+  let err=null;const enc=new VideoEncoder({output:(c,m)=>muxer.addVideoChunk(c,m),error:e=>err=e});enc.configure(cfg);
+  pr.max=n;const t0=performance.now();
+  for(let i=0;i<n;i++){
+   if(S.cancel)throw"cancel";if(err)throw err;
+   while(enc.encodeQueueSize>6){await sleep(2);if(err)throw err}
+   draw(ctx,W,H,winAt(i/(n-1)));
+   const f=new VideoFrame(cv,{timestamp:Math.round(i*1e6/fps),duration:Math.round(1e6/fps)});enc.encode(f,{keyFrame:i%(fps*2)==0});f.close();
+   if(i%3==0){pr.value=i+1;const left=(performance.now()-t0)/(i+1)*(n-i-1)/1000;pl.textContent=`Frame ${i+1} of ${n} · about ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")} left`;await sleep(0)}
+  }
+  await enc.flush();if(err)throw err;muxer.finalize();enc.close();
+  S.blob=new Blob([muxer.target.buffer],{type:"video/mp4"});
+  $("#vid").src=URL.createObjectURL(S.blob);$("#done").hidden=false;$("#dlmsg").textContent=`${W} × ${H} px · ${(S.blob.size/1048576).toFixed(1)} MB · ${cfg.codec}`;pl.textContent="Done.";
+ }catch(e){pl.textContent=e==="cancel"?"Cancelled. No file was created.":"";if(e!=="cancel")alert(e&&e.message?e.message:String(e))}
+ finally{S.busy=false;pr.hidden=true;$("#cancel").hidden=true;$("#save").disabled=false}
+};
+let DL=null;(async()=>{try{DL=await window.claude?.use("downloads")}catch(e){}})();
+$("#dl").onclick=async()=>{
+ if(!S.blob)return;
+ if(!DL){$("#dlmsg").textContent="Saving isn’t available here. Press and hold the video above and choose to save it.";return}
+ try{await DL.save({filename:S.name+".mp4",data:S.blob});$("#dlmsg").textContent="Saved."}
+ catch(e){$("#dlmsg").textContent=e&&e.code=="declined"?"Saving was cancelled.":"Couldn’t save: "+(e&&e.message||e)}
+};
+addEventListener("resize",()=>S.img&&refresh());refresh();
+</script></body></html>
