@@ -54,7 +54,7 @@ progress{width:100%;accent-color:var(--ac)}video{width:100%;border-radius:10px;m
  <p class="mu" id="oinfo"></p>
  <button class="pri" id="save" style="width:100%" disabled>Create video</button>
  <progress id="prog" hidden></progress><div class="row"><span class="mu" id="pl"></span><button id="cancel" hidden>Cancel</button></div>
- <div id="done" hidden><video id="vid" controls playsinline></video><button class="pri" id="dl" style="width:100%;margin-top:8px">Save file…</button><p class="mu" id="dlmsg"></p></div>
+ <div id="done" hidden><video id="vid" controls playsinline></video><button class="pri" id="dl" style="width:100%;margin-top:8px">Save to Photos / Share…</button><p class="mu" id="dlmsg"></p></div>
 </section>
 </main>
 <script>
@@ -146,9 +146,18 @@ $("#save").onclick=async()=>{
 let DL=null;(async()=>{try{DL=await window.claude?.use("downloads")}catch(e){}})();
 $("#dl").onclick=async()=>{
  if(!S.blob)return;
- if(!DL){$("#dlmsg").textContent="Saving isn’t available here. Press and hold the video above and choose to save it.";return}
- try{await DL.save({filename:S.name+".mp4",data:S.blob});$("#dlmsg").textContent="Saved."}
- catch(e){$("#dlmsg").textContent=e&&e.code=="declined"?"Saving was cancelled.":"Couldn’t save: "+(e&&e.message||e)}
+ const m=$("#dlmsg"),name=S.name+".mp4";
+ if(DL){
+  try{await DL.save({filename:name,data:S.blob});m.textContent="Saved."}
+  catch(e){m.textContent=e&&e.code=="declined"?"Saving was cancelled.":"Couldn’t save: "+(e&&e.message||e)}
+  return}
+ const file=new File([S.blob],name,{type:"video/mp4"});
+ if(navigator.canShare&&navigator.canShare({files:[file]})){
+  try{await navigator.share({files:[file]});m.textContent="In the share sheet, tap “Save Video” to put it in Photos."}
+  catch(e){m.textContent=e&&e.name=="AbortError"?"Cancelled.":"Couldn’t open the share sheet: "+(e&&e.message||e)}
+  return}
+ const a=document.createElement("a");a.href=URL.createObjectURL(S.blob);a.download=name;document.body.append(a);a.click();a.remove();
+ m.textContent="Download started. Look in your Downloads folder or the Files app."
 };
 addEventListener("resize",()=>S.img&&refresh());refresh();
 </script></body></html>
